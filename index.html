@@ -1697,116 +1697,108 @@
         }
         
         // NOTES (Audio Recording)
-        // ✅ CORRECTED toggleRecord FUNCTION
         async function toggleRecord() {
-            const btn = document.getElementById('record-btn');
-            const txtBox = document.getElementById('notes-summary-output');
-            const statusEl = document.getElementById('recording-status');
+        const btn = document.getElementById('record-btn');
+        const txtBox = document.getElementById('notes-summary-output');
+        const statusEl = document.getElementById('recording-status');
+        
+        // --- STOP ACTION (Same as before) ---
+        if (window.AppState.isRecording) {
+            window.AppState.isRecording = false; 
+
+            if(window.AppState.recognition) {
+                window.AppState.recognition.onend = null; 
+                window.AppState.recognition.stop();
+            }
             
-            // --- STOP ACTION ---
-            if (window.AppState.isRecording) {
-                window.AppState.isRecording = false; 
+            if (window.AppState.audioCtx) {
+                window.AppState.audioCtx.suspend();
+            }
 
-                // Stop Speech Recognition
-                if(window.AppState.recognition) {
-                    window.AppState.recognition.onend = null; // Prevent auto-restart
-                    window.AppState.recognition.stop();
+            btn.innerHTML = '<i class="fas fa-microphone text-3xl"></i> 開始錄音';
+            btn.classList.remove('bg-red-600', 'animate-pulse');
+            btn.classList.add('btn-primary');
+            txtBox.classList.remove('border-red-400', 'bg-red-50');
+            if(statusEl) statusEl.textContent = "";
+            
+            setTimeout(() => {
+                const currentText = txtBox.value.trim();
+                if (currentText.length > 5) analyzeNoteText();
+            }, 800);
+            
+        } else {
+            // --- START ACTION (OPTIMIZED) ---
+            try {
+                // 1. Light Audio Warm-up (Keeps system awake, but doesn't lock Mic)
+                if (!window.AppState.audioCtx) {
+                    window.AppState.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (window.AppState.audioCtx.state === 'suspended') {
+                    await window.AppState.audioCtx.resume();
                 }
                 
-                // Close Audio Context
-                if (window.AppState.audioCtx) {
-                    window.AppState.audioCtx.suspend();
+                // 2. Direct Speech Start (Skips the slow "double check")
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+                if (!SpeechRecognition) {
+                    alert("此瀏覽器不支援語音功能");
+                    return;
                 }
 
-                // Reset UI
-                btn.innerHTML = '<i class="fas fa-microphone text-3xl"></i> 開始錄音';
-                btn.classList.remove('bg-red-600', 'animate-pulse');
-                btn.classList.add('btn-primary');
-                txtBox.classList.remove('border-red-400', 'bg-red-50');
-                if(statusEl) statusEl.textContent = "";
-                
-                // Auto Analyze
-                setTimeout(() => {
-                    const currentText = txtBox.value.trim();
-                    if (currentText.length > 5) {
-                        analyzeNoteText();
-                    }
-                }, 800);
-                
-            } else {
-                // --- START ACTION ---
-                try {
-                    // 1. Audio Hardware Warm-up
-                    if (!window.AppState.audioCtx) {
-                        window.AppState.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                    }
-                    if (window.AppState.audioCtx.state === 'suspended') {
-                        await window.AppState.audioCtx.resume();
-                    }
-                    // Silent buffer to wake up the audio path
-                    const buffer = window.AppState.audioCtx.createBuffer(1, 1, 22050);
-                    const node = window.AppState.audioCtx.createBufferSource();
-                    node.buffer = buffer;
-                    node.connect(window.AppState.audioCtx.destination);
-                    node.start(0);
+                const recognition = new SpeechRecognition();
+                recognition.lang = document.getElementById('notes-lang-select').value || 'zh-HK';
+                // True allows you to see words as you speak (feels faster)
+                recognition.interimResults = true; 
+                recognition.maxAlternatives = 1;
 
-                    // 2. Get Mic Permissions (Just to verify user allows it)
-                    const stream = await navigator.mediaDevices.getUserMedia({ 
-                        audio: { echoCancellation: true, noiseSuppression: true } 
-                    });
-                    
-                    // 3. SAMSUNG FIX: Release the mic immediately so SpeechRecognition can grab it
-                    stream.getTracks().forEach(track => track.stop()); 
+                recognition.onerror = (event) => {
+                    console.error("Mic Error:", event.error);
+                    // Ignore "no-speech" errors which happen often
+                    if (event.error === 'no-speech') return; 
 
-                    // 4. Setup Speech Recognition (Cross-Browser)
-                    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                    window.AppState.isRecording = false;
+                    btn.innerHTML = '<i class="fas fa-microphone text-3xl"></i> 開始錄音';
+                    btn.classList.remove('bg-red-600', 'animate-pulse');
+                    if (event.error === 'not-allowed') alert("請允許麥克風權限");
+                };
 
-                    if (!SpeechRecognition) {
-                        alert("此瀏覽器不支援語音功能 (請使用 Safari 或 Chrome)");
-                        return;
+                // 3. Handle Results (Updated for Speed)
+                recognition.onresult = (event) => {
+                    let finalTranscript = '';
+                    // Loop through results to separate final vs interim
+                    for (let i = event.resultIndex; i < event.results.length; ++i) {
+                        if (event.results[i].isFinal) {
+                            finalTranscript += event.results[i][0].transcript;
+                        }
                     }
 
-                    const recognition = new SpeechRecognition();
-                    recognition.lang = document.getElementById('notes-lang-select').value || 'zh-HK';
-                    recognition.interimResults = false;
-                    recognition.maxAlternatives = 1;
-
-                    // 5. Error Handling
-                    recognition.onerror = (event) => {
-                        console.error("Mic Error:", event.error);
-                        if (event.error === 'not-allowed') alert("請允許麥克風權限");
-                        
-                        // Stop UI on error
-                        window.AppState.isRecording = false;
-                        btn.innerHTML = '<i class="fas fa-microphone text-3xl"></i> 開始錄音';
-                        btn.classList.remove('bg-red-600', 'animate-pulse');
-                    };
-
-                    // 6. Handle Results (Text Output)
-                    recognition.onresult = (event) => {
-                        const transcript = event.results[0][0].transcript;
+                    // Only update if we have a finalized sentence to avoid flickering
+                    if (finalTranscript) {
                         const current = txtBox.value;
-                        // Append text intelligently
-                        txtBox.value = current ? current + "\n" + transcript : transcript;
-                    };
+                        txtBox.value = current ? current + "\n" + finalTranscript : finalTranscript;
+                        // Auto-scroll to bottom
+                        txtBox.scrollTop = txtBox.scrollHeight;
+                    }
+                };
 
-                    // 7. Start Listening
-                    recognition.start();
-                    window.AppState.recognition = recognition;
-                    window.AppState.isRecording = true;
-
-                    // Update UI
+                recognition.onstart = () => {
+                    // Visual confirmation that it is actually listening
                     btn.innerHTML = '<i class="fas fa-stop text-3xl"></i> 停止錄音';
                     btn.classList.remove('btn-primary'); 
                     btn.classList.add('bg-red-600', 'animate-pulse'); 
                     txtBox.classList.add('border-red-400', 'bg-red-50');
+                };
 
-                } catch (err) {
-                    console.error(err);
-                    alert("無法存取麥克風，請檢查設定。");
-                }
+                recognition.start();
+                window.AppState.recognition = recognition;
+                window.AppState.isRecording = true;
+
+            } catch (err) {
+                console.error(err);
+                alert("無法啟動麥克風");
             }
         }
+    }
 
         // NEW: "Full Session" Logic (Prevents Deleting Words)
         function startSpeechLoop() {
