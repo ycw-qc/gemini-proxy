@@ -1768,7 +1768,17 @@
                     });
                     
                     // 2. Audio Recorder (For the file)
-                    window.AppState.mediaRecorder = new MediaRecorder(stream);
+                    // --- NEW ANDROID FIX START ---
+                    let options = { mimeType: 'audio/webm' };
+                    if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+                        options = { mimeType: 'audio/webm;codecs=opus' }; // Best for Android Chrome
+                    } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+                        options = { mimeType: 'audio/mp4' }; // Best for iOS Safari
+                    }
+                    
+                    window.AppState.mediaRecorder = new MediaRecorder(stream, options);
+                    // --- NEW ANDROID FIX END ---
+                    
                     window.AppState.audioChunks = [];
                     window.AppState.mediaRecorder.ondataavailable = (e) => window.AppState.audioChunks.push(e.data);
                     window.AppState.mediaRecorder.onstop = async () => {
