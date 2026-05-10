@@ -2173,14 +2173,20 @@
                 //const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "Could not analyze. Try again.";
 
                  // 1. 設定 Payload (這部分你原本的寫法 OK)
+                //const payload = {
+                //    contents: [{
+                //        parts: [
+                //            { text: prompt },
+                //            ...images
+                //        ]
+                //    }]
+                //};
+
                 const payload = {
-                    contents: [{
-                        parts: [
-                            { text: prompt },
-                            ...images
-                        ]
+                contents: [{
+                    parts: [{ text: prompt }] // 暫時移除 ...images 進行測試
                     }]
-                };
+                }; 
                 
                 // 2. 呼叫 API 並增加錯誤檢查
                 const response = await fetch('https://carea.vercel.app/api', {
