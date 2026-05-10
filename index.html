@@ -1949,10 +1949,7 @@
 
                 if (aiSummary) {
                     document.getElementById('notes-summary-output').value = aiSummary;
-                } else {
-                    const response = await fetch('/your-api-endpoint');
-                    const rawData = await response.text(); // 先抓取原始文字
-                    console.log("伺服器原始回傳:", rawData);                    
+                } else {                
                     throw new Error("No AI response");
                 }
 
@@ -2157,6 +2154,25 @@
                 prompt += "OUTPUT FORMAT: First line: Medicine Name (keep original name). Next paragraph: Simple, friendly explanation in Traditional Chinese (Hong Kong Style / 繁體中文) ONLY. Do not use English words. Explain what it is for and one key safety tip. Keep it short.";
 
                 // Call Gemini
+                //const payload = {
+                //    contents: [{
+                //        parts: [
+                //            { text: prompt },
+                //            ...images
+                //        ]
+                //    }]
+                //};
+                
+                //const response = await fetch('https://carea.vercel.app/api', {
+                //    method: 'POST',
+                //    headers: { 'Content-Type': 'application/json' },
+                //    body: JSON.stringify(payload)
+                //});
+                
+                //const data = await response.json();
+                //const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "Could not analyze. Try again.";
+
+                 // 1. 設定 Payload (這部分你原本的寫法 OK)
                 const payload = {
                     contents: [{
                         parts: [
@@ -2166,14 +2182,25 @@
                     }]
                 };
                 
+                // 2. 呼叫 API 並增加錯誤檢查
                 const response = await fetch('https://carea.vercel.app/api', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
                 
+                // 新增：如果伺服器回傳 429 或 504，這裡會先攔截
+                if (!response.ok) {
+                    console.error("API 伺服器回報錯誤:", response.status);
+                    throw new Error(`HTTP 錯誤! 狀態碼: ${response.status}`);
+                }
+                
                 const data = await response.json();
-                const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "Could not analyze. Try again.";
+                
+                // 3. 修正變數名稱！將 'text' 改為 'aiSummary' 以對接後續邏輯
+                const aiSummary = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                
+                // 這樣你後面的 if (aiSummary) { ... } 就能順利跑通了！
                 
                 // Parse rudimentary (First line name, rest summary)
                 const lines = text.split('\n');
