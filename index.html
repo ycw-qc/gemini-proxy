@@ -1950,6 +1950,9 @@
                 if (aiSummary) {
                     document.getElementById('notes-summary-output').value = aiSummary;
                 } else {
+                    const response = await fetch('/your-api-endpoint');
+                    const rawData = await response.text(); // 先抓取原始文字
+                    console.log("伺服器原始回傳:", rawData);                    
                     throw new Error("No AI response");
                 }
 
